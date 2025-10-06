@@ -413,6 +413,12 @@ namespace asmtowasm
     case InstructionType::JMP:
       builder_->CreateBr(targetBlock);
       std::cout << "    JMP命令を生成: " << instruction.operands[0].value << std::endl;
+      {
+        // 継続ブロックを作成して挿入ポイントを移動（終端直後の挿入を防ぐ）
+        llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
+        llvm::BasicBlock *contBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
+        builder_->SetInsertPoint(contBlock);
+      }
       break;
     case InstructionType::JE:
     case InstructionType::JNE:
@@ -423,6 +429,12 @@ namespace asmtowasm
       // 条件分岐は簡単化のため、無条件ジャンプとして実装
       builder_->CreateBr(targetBlock);
       std::cout << "    条件ジャンプ命令を生成: " << instruction.operands[0].value << std::endl;
+      {
+        // 継続ブロックを作成して挿入ポイントを移動（終端直後の挿入を防ぐ）
+        llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
+        llvm::BasicBlock *contBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
+        builder_->SetInsertPoint(contBlock);
+      }
       break;
     default:
       return false;
@@ -474,6 +486,12 @@ namespace asmtowasm
       }
       builder_->CreateRet(retValue);
       std::cout << "    RET命令を生成: 値を返す" << std::endl;
+    }
+    // 継続ブロックを作成して挿入ポイントを移動（終端直後の挿入を防ぐ）
+    {
+      llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
+      llvm::BasicBlock *contBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
+      builder_->SetInsertPoint(contBlock);
     }
     return true;
   }

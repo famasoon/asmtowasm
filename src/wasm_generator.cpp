@@ -217,6 +217,44 @@ namespace asmtowasm
     {
       return convertBitCastInstruction(inst, instructions);
     }
+    else if (llvm::isa<llvm::ZExtInst>(inst))
+    {
+      // ゼロ拡張（例: i1 -> i32）を変換
+      llvm::ZExtInst *zext = llvm::cast<llvm::ZExtInst>(inst);
+      llvm::Value *op = zext->getOperand(0);
+
+      // 代表的ケース: 比較結果(i1)のゼロ拡張
+      if (llvm::isa<llvm::CmpInst>(op))
+      {
+        // 比較をWasmに変換（結果がスタックにi32で積まれる）
+        if (!convertCompareInstruction(llvm::cast<llvm::Instruction>(op), instructions))
+        {
+          return false;
+        }
+      }
+      else if (llvm::isa<llvm::ConstantInt>(op))
+      {
+        auto *constInt = llvm::cast<llvm::ConstantInt>(op);
+        instructions.push_back(WasmInstruction(WasmOpcode::I32_CONST, constInt->getZExtValue()));
+      }
+      else if (llvm::isa<llvm::LoadInst>(op))
+      {
+        auto *load = llvm::cast<llvm::LoadInst>(op);
+        uint32_t localIdx = getLocalIndex(load->getPointerOperand());
+        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
+      }
+      else
+      {
+        // 最低限の対応: その他は未対応として扱う
+        errorMessage_ = "未対応のZExtオペランド";
+        return false;
+      }
+
+      // zextの結果をローカルに保存
+      uint32_t resultIdx = getLocalIndex(inst);
+      instructions.push_back(WasmInstruction(WasmOpcode::SET_LOCAL, resultIdx));
+      return true;
+    }
 
     // 未対応の命令
     errorMessage_ = "未対応のLLVM命令: " + std::string(inst->getOpcodeName());
@@ -500,6 +538,12 @@ namespace asmtowasm
         uint32_t localIdx = getLocalIndex(load->getPointerOperand());
         instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
       }
+      else if (llvm::isa<llvm::ZExtInst>(value))
+      {
+        // 直前にzextをローカルに保存している前提で取り出す
+        uint32_t localIdx = getLocalIndex(value);
+        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
+      }
 
       // ポインタオペランドを処理
       llvm::Value *ptrOperand = storeInst->getPointerOperand();
@@ -660,14 +704,12 @@ namespace asmtowasm
   {
     std::ostringstream wast;
 
-    wast << "(" << getWasmOpcodeString(inst.opcode);
+    wast << getWasmOpcodeString(inst.opcode);
 
     for (uint64_t operand : inst.operands)
     {
       wast << " " << operand;
     }
-
-    wast << ")";
 
     return wast.str();
   }
@@ -728,9 +770,9 @@ namespace asmtowasm
     case WasmOpcode::I32_GE_U:
       return "i32.ge_u";
     case WasmOpcode::GET_LOCAL:
-      return "get_local";
+      return "local.get";
     case WasmOpcode::SET_LOCAL:
-      return "set_local";
+      return "local.set";
     case WasmOpcode::CALL:
       return "call";
     case WasmOpcode::RETURN:

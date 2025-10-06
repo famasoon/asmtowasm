@@ -297,8 +297,30 @@ namespace asmtowasm
 
   bool LLVMGenerator::generateCallInstruction(const Instruction &instruction)
   {
-    errorMessage_ = "CALL命令は未実装です";
-    return false;
+    if (instruction.operands.size() != 1)
+    {
+      errorMessage_ = "CALL命令には1つのオペランドが必要です";
+      return false;
+    }
+
+    const std::string funcName = instruction.operands[0].value;
+
+    // 既存関数を取得、なければ i32() -> i32 の外部関数として作成
+    llvm::Function *callee = module_->getFunction(funcName);
+    if (!callee)
+    {
+      llvm::FunctionType *funcType = llvm::FunctionType::get(getIntType(), false);
+      callee = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, *module_);
+    }
+
+    if (!callee)
+    {
+      errorMessage_ = "関数が見つかりません: " + funcName;
+      return false;
+    }
+
+    builder_->CreateCall(callee);
+    return true;
   }
 
   bool LLVMGenerator::generateReturnInstruction(const Instruction &instruction)
