@@ -173,7 +173,11 @@ namespace asmtowasm
       return InstructionType::JMP;
     if (upper == "JE")
       return InstructionType::JE;
+    if (upper == "JZ") // alias of JE
+      return InstructionType::JE;
     if (upper == "JNE")
+      return InstructionType::JNE;
+    if (upper == "JNZ") // alias of JNE
       return InstructionType::JNE;
     if (upper == "JL")
       return InstructionType::JL;
