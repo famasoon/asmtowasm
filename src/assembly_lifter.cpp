@@ -389,12 +389,19 @@ namespace asmtowasm
       return false;
     }
 
-    // 比較結果をフラグレジスタに保存
-    llvm::Value *cmpResult = builder_->CreateICmpEQ(left, right, "cmp_result");
-    // boolean型をi32型に変換
-    llvm::Value *cmpResultInt = builder_->CreateZExt(cmpResult, getIntType(), "cmp_result_int");
-    setFlagRegister("ZF", cmpResultInt);
-    std::cout << "    CMP命令を生成" << std::endl;
+    // 各種フラグを設定（符号付き比較）
+    llvm::Value *eq = builder_->CreateICmpEQ(left, right, "cmp_eq");
+    llvm::Value *lt = builder_->CreateICmpSLT(left, right, "cmp_lt");
+    llvm::Value *gt = builder_->CreateICmpSGT(left, right, "cmp_gt");
+    llvm::Value *le = builder_->CreateICmpSLE(left, right, "cmp_le");
+    llvm::Value *ge = builder_->CreateICmpSGE(left, right, "cmp_ge");
+
+    setFlagRegister("ZF", builder_->CreateZExt(eq, getIntType(), "zf_int"));
+    setFlagRegister("LT", builder_->CreateZExt(lt, getIntType(), "lt_int"));
+    setFlagRegister("GT", builder_->CreateZExt(gt, getIntType(), "gt_int"));
+    setFlagRegister("LE", builder_->CreateZExt(le, getIntType(), "le_int"));
+    setFlagRegister("GE", builder_->CreateZExt(ge, getIntType(), "ge_int"));
+    std::cout << "    CMP命令を生成 (ZF,LT,GT,LE,GE を設定)" << std::endl;
 
     return true;
   }
@@ -435,12 +442,15 @@ namespace asmtowasm
     case InstructionType::JLE:
     case InstructionType::JGE:
     {
-      // 簡易条件分岐: 現状はCMPの結果として保存したZF(i32)のみを使用
-      // JE/JLE: ZF != 0 で分岐、JNE: ZF == 0 で分岐
-      llvm::Value *zfReg = getFlagRegister("ZF");
-      llvm::Value *zfVal = builder_->CreateLoad(getIntType(), zfReg, "zf_val");
-      llvm::Value *isNonZero = builder_->CreateICmpNE(zfVal, llvm::ConstantInt::get(getIntType(), 0), "zf_nz");
-      llvm::Value *isZero = builder_->CreateICmpEQ(zfVal, llvm::ConstantInt::get(getIntType(), 0), "zf_z");
+      // CMPで設定したフラグを使用して条件分岐を生成
+      auto getFlagCond = [&](const char *name, bool branchWhenNonZero) -> llvm::Value *
+      {
+        llvm::Value *reg = getFlagRegister(name);
+        llvm::Value *val = builder_->CreateLoad(getIntType(), reg, std::string(name) + "_val");
+        return branchWhenNonZero
+                   ? builder_->CreateICmpNE(val, llvm::ConstantInt::get(getIntType(), 0), std::string(name) + "_nz")
+                   : builder_->CreateICmpEQ(val, llvm::ConstantInt::get(getIntType(), 0), std::string(name) + "_z");
+      };
 
       llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
       llvm::BasicBlock *fallthrough = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
@@ -448,11 +458,22 @@ namespace asmtowasm
       switch (instruction.type)
       {
       case InstructionType::JE:
-      case InstructionType::JLE:
-        builder_->CreateCondBr(isNonZero, targetBlock, fallthrough);
+        builder_->CreateCondBr(getFlagCond("ZF", /*branchWhenNonZero*/ true), targetBlock, fallthrough);
         break;
       case InstructionType::JNE:
-        builder_->CreateCondBr(isZero, fallthrough, targetBlock);
+        builder_->CreateCondBr(getFlagCond("ZF", /*branchWhenNonZero*/ false), fallthrough, targetBlock);
+        break;
+      case InstructionType::JL:
+        builder_->CreateCondBr(getFlagCond("LT", /*branchWhenNonZero*/ true), targetBlock, fallthrough);
+        break;
+      case InstructionType::JG:
+        builder_->CreateCondBr(getFlagCond("GT", /*branchWhenNonZero*/ true), targetBlock, fallthrough);
+        break;
+      case InstructionType::JLE:
+        builder_->CreateCondBr(getFlagCond("LE", /*branchWhenNonZero*/ true), targetBlock, fallthrough);
+        break;
+      case InstructionType::JGE:
+        builder_->CreateCondBr(getFlagCond("GE", /*branchWhenNonZero*/ true), targetBlock, fallthrough);
         break;
       default:
         // 他の条件は暫定で無条件ジャンプ
