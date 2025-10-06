@@ -29,16 +29,19 @@ namespace asmtowasm
     std::cout << "Assemblyリフター: LLVM IR生成を開始" << std::endl;
     std::cout << "命令数: " << instructions.size() << ", ラベル数: " << labels.size() << std::endl;
 
-    // メイン関数を作成
-    llvm::FunctionType *funcType = llvm::FunctionType::get(getIntType(), false);
-    llvm::Function *mainFunc = llvm::Function::Create(funcType,
-                                                      llvm::Function::ExternalLinkage,
-                                                      "main",
-                                                      *module_);
+    // CALL先ラベルを事前収集（関数として扱う）
+    std::set<std::string> callTargets;
+    for (const auto &inst : instructions)
+    {
+      if (inst.type == InstructionType::CALL && inst.operands.size() == 1 && inst.operands[0].type == OperandType::LABEL)
+      {
+        callTargets.insert(inst.operands[0].value);
+      }
+    }
 
-    llvm::BasicBlock *entryBlock = llvm::BasicBlock::Create(*context_, "entry", mainFunc);
-    builder_->SetInsertPoint(entryBlock);
-    std::cout << "メイン関数とentryブロックを作成" << std::endl;
+    // 関数はラベル到達時に作成
+    llvm::FunctionType *funcType = llvm::FunctionType::get(getIntType(), false);
+    llvm::Function *currentFunc = nullptr;
 
     // 各命令をLLVM IRに変換
     for (size_t i = 0; i < instructions.size(); ++i)
@@ -50,11 +53,26 @@ namespace asmtowasm
       }
       std::cout << "タイプ=" << static_cast<int>(instructions[i].type) << std::endl;
 
-      // ラベル付きの命令の場合、新しいBasicBlockに切り替え
+      // ラベル付きの命令: 関数開始 or 現関数内ブロック
       if (!instructions[i].label.empty())
       {
-        llvm::BasicBlock *labelBlock = getOrCreateBlock(instructions[i].label);
-        builder_->SetInsertPoint(labelBlock);
+        const std::string &labelName = instructions[i].label;
+        if (labelName == "main" || callTargets.count(labelName) > 0)
+        {
+          // 新しい関数に切替え
+          currentFunc = getOrCreateFunction(labelName);
+          // ブロック名の衝突を避けるためクリア
+          blocks_.clear();
+          registers_.clear();
+          llvm::BasicBlock *funcEntry = llvm::BasicBlock::Create(*context_, labelName, currentFunc);
+          builder_->SetInsertPoint(funcEntry);
+        }
+        else
+        {
+          // 現関数内のブロックとして扱う
+          llvm::BasicBlock *labelBlock = getOrCreateBlock(labelName);
+          builder_->SetInsertPoint(labelBlock);
+        }
       }
 
       if (!liftInstruction(instructions[i], i))
@@ -64,42 +82,24 @@ namespace asmtowasm
       }
     }
 
-    // entryブロックに何も命令が追加されていない場合、最初のブロックにジャンプ
-    if (entryBlock->empty())
-    {
-      std::cout << "entryブロックが空なので、最初のブロックへのジャンプを追加" << std::endl;
-      // 最初の命令のラベルを取得
-      if (!instructions.empty() && !instructions[0].label.empty())
-      {
-        llvm::BasicBlock *firstBlock = getOrCreateBlock(instructions[0].label);
-        builder_->SetInsertPoint(entryBlock);
-        builder_->CreateBr(firstBlock);
-      }
-      else
-      {
-        // ラベルがない場合はreturn文を追加
-        builder_->SetInsertPoint(entryBlock);
-        builder_->CreateRet(llvm::ConstantInt::get(getIntType(), 0));
-      }
-    }
-    else
-    {
-      std::cout << "entryブロックに命令が追加されています" << std::endl;
-    }
+    // 旧entryブロック処理は不要（関数はラベル到達時に開始）
 
     // すべてのBasicBlockに終端命令があることを確認
-    for (auto &block : *mainFunc)
+    if (currentFunc)
     {
-      std::cout << "BasicBlock " << block.getName().str() << " をチェック中..." << std::endl;
-      if (!block.getTerminator())
+      for (auto &block : *currentFunc)
       {
-        std::cout << "BasicBlock " << block.getName().str() << " に終端命令を追加" << std::endl;
-        llvm::IRBuilder<> tempBuilder(&block);
-        tempBuilder.CreateRet(llvm::ConstantInt::get(getIntType(), 0));
-      }
-      else
-      {
-        std::cout << "BasicBlock " << block.getName().str() << " は既に終端命令を持っています" << std::endl;
+        std::cout << "BasicBlock " << block.getName().str() << " をチェック中..." << std::endl;
+        if (!block.getTerminator())
+        {
+          std::cout << "BasicBlock " << block.getName().str() << " に終端命令を追加" << std::endl;
+          llvm::IRBuilder<> tempBuilder(&block);
+          tempBuilder.CreateRet(llvm::ConstantInt::get(getIntType(), 0));
+        }
+        else
+        {
+          std::cout << "BasicBlock " << block.getName().str() << " は既に終端命令を持っています" << std::endl;
+        }
       }
     }
 
@@ -110,13 +110,21 @@ namespace asmtowasm
     std::cout << "IR検証を開始..." << std::endl;
     std::string verifyError;
     llvm::raw_string_ostream verifyStream(verifyError);
-    if (llvm::verifyFunction(*mainFunc, &verifyStream))
+    // 全関数を検証
+    for (auto &func : *module_)
     {
-      std::cout << "IR検証エラー: " << verifyError << std::endl;
-      std::cout << "生成されたLLVM IR:" << std::endl;
-      std::cout << getIRString() << std::endl;
-      errorMessage_ = "IR検証エラー: " + verifyError;
-      return false;
+      if (func.isDeclaration())
+        continue;
+      verifyError.clear();
+      llvm::raw_string_ostream vs(verifyError);
+      if (llvm::verifyFunction(func, &vs))
+      {
+        std::cout << "IR検証エラー: " << verifyError << std::endl;
+        std::cout << "生成されたLLVM IR:" << std::endl;
+        std::cout << getIRString() << std::endl;
+        errorMessage_ = "IR検証エラー: " + verifyError;
+        return false;
+      }
     }
     std::cout << "IR検証成功!" << std::endl;
     std::cout << "Assemblyリフター: LLVM IR生成完了" << std::endl;
@@ -413,11 +421,11 @@ namespace asmtowasm
     case InstructionType::JMP:
       builder_->CreateBr(targetBlock);
       std::cout << "    JMP命令を生成: " << instruction.operands[0].value << std::endl;
+      // 終端後に後続命令を挿入しないよう、新しい継続ブロックへ切替
       {
-        // 継続ブロックを作成して挿入ポイントを移動（終端直後の挿入を防ぐ）
         llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
-        llvm::BasicBlock *contBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
-        builder_->SetInsertPoint(contBlock);
+        llvm::BasicBlock *nextBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
+        builder_->SetInsertPoint(nextBlock);
       }
       break;
     case InstructionType::JE:
@@ -426,16 +434,36 @@ namespace asmtowasm
     case InstructionType::JG:
     case InstructionType::JLE:
     case InstructionType::JGE:
-      // 条件分岐は簡単化のため、無条件ジャンプとして実装
-      builder_->CreateBr(targetBlock);
-      std::cout << "    条件ジャンプ命令を生成: " << instruction.operands[0].value << std::endl;
+    {
+      // 簡易条件分岐: 現状はCMPの結果として保存したZF(i32)のみを使用
+      // JE/JLE: ZF != 0 で分岐、JNE: ZF == 0 で分岐
+      llvm::Value *zfReg = getFlagRegister("ZF");
+      llvm::Value *zfVal = builder_->CreateLoad(getIntType(), zfReg, "zf_val");
+      llvm::Value *isNonZero = builder_->CreateICmpNE(zfVal, llvm::ConstantInt::get(getIntType(), 0), "zf_nz");
+      llvm::Value *isZero = builder_->CreateICmpEQ(zfVal, llvm::ConstantInt::get(getIntType(), 0), "zf_z");
+
+      llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
+      llvm::BasicBlock *fallthrough = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
+
+      switch (instruction.type)
       {
-        // 継続ブロックを作成して挿入ポイントを移動（終端直後の挿入を防ぐ）
-        llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
-        llvm::BasicBlock *contBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
-        builder_->SetInsertPoint(contBlock);
+      case InstructionType::JE:
+      case InstructionType::JLE:
+        builder_->CreateCondBr(isNonZero, targetBlock, fallthrough);
+        break;
+      case InstructionType::JNE:
+        builder_->CreateCondBr(isZero, fallthrough, targetBlock);
+        break;
+      default:
+        // 他の条件は暫定で無条件ジャンプ
+        builder_->CreateBr(targetBlock);
+        break;
       }
+
+      builder_->SetInsertPoint(fallthrough);
+      std::cout << "    条件ジャンプ命令を生成: " << instruction.operands[0].value << std::endl;
       break;
+    }
     default:
       return false;
     }
@@ -486,12 +514,6 @@ namespace asmtowasm
       }
       builder_->CreateRet(retValue);
       std::cout << "    RET命令を生成: 値を返す" << std::endl;
-    }
-    // 継続ブロックを作成して挿入ポイントを移動（終端直後の挿入を防ぐ）
-    {
-      llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
-      llvm::BasicBlock *contBlock = llvm::BasicBlock::Create(*context_, "cont", currentFunc);
-      builder_->SetInsertPoint(contBlock);
     }
     return true;
   }

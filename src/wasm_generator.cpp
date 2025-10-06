@@ -525,27 +525,7 @@ namespace asmtowasm
     {
       llvm::StoreInst *storeInst = llvm::cast<llvm::StoreInst>(inst);
 
-      // 値をスタックにプッシュ
-      llvm::Value *value = storeInst->getValueOperand();
-      if (llvm::isa<llvm::ConstantInt>(value))
-      {
-        llvm::ConstantInt *constInt = llvm::cast<llvm::ConstantInt>(value);
-        instructions.push_back(WasmInstruction(WasmOpcode::I32_CONST, constInt->getZExtValue()));
-      }
-      else if (llvm::isa<llvm::LoadInst>(value))
-      {
-        llvm::LoadInst *load = llvm::cast<llvm::LoadInst>(value);
-        uint32_t localIdx = getLocalIndex(load->getPointerOperand());
-        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
-      }
-      else if (llvm::isa<llvm::ZExtInst>(value))
-      {
-        // 直前にzextをローカルに保存している前提で取り出す
-        uint32_t localIdx = getLocalIndex(value);
-        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
-      }
-
-      // ポインタオペランドを処理
+      // ポインタオペランドを先にスタックへ（Wasm storeは「アドレス→値」の順）
       llvm::Value *ptrOperand = storeInst->getPointerOperand();
 
       if (llvm::isa<llvm::IntToPtrInst>(ptrOperand))
@@ -577,6 +557,26 @@ namespace asmtowasm
         // 通常のポインタアクセス
         uint32_t localIdx = getLocalIndex(ptrOperand);
         instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
+      }
+
+      // 値を後からスタックにプッシュ
+      llvm::Value *value = storeInst->getValueOperand();
+      if (llvm::isa<llvm::ConstantInt>(value))
+      {
+        llvm::ConstantInt *constInt = llvm::cast<llvm::ConstantInt>(value);
+        instructions.push_back(WasmInstruction(WasmOpcode::I32_CONST, constInt->getZExtValue()));
+      }
+      else if (llvm::isa<llvm::LoadInst>(value))
+      {
+        llvm::LoadInst *load = llvm::cast<llvm::LoadInst>(value);
+        uint32_t valLocalIdx = getLocalIndex(load->getPointerOperand());
+        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, valLocalIdx));
+      }
+      else if (llvm::isa<llvm::ZExtInst>(value))
+      {
+        // 直前にzextをローカルに保存している前提で取り出す
+        uint32_t valLocalIdx = getLocalIndex(value);
+        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, valLocalIdx));
       }
 
       // WebAssemblyメモリストア命令（アライメント考慮）
