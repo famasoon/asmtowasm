@@ -1,118 +1,118 @@
 # AsmToWasm - Assembly to LLVM IR/Wasm Converter
 
-AssemblyコードをLLVM IR/Wasmに変換するC++ツールです。
+This is a C++ tool that converts simple Assembly code to LLVM IR and WebAssembly (WAT/WASM).
 
-## 概要
+## Overview
 
-このプロジェクトは、簡易的なAssembly言語のコードをLLVM IR（Intermediate Representation）に変換し、オプションでWebAssembly(WAT/WASM)にも出力するコンパイラです。教育目的やプロトタイプ開発に適しています。
+This project compiles a simplified Assembly language into LLVM IR (Intermediate Representation), and optionally emits WebAssembly (WAT/WASM). It is designed for education and prototyping.
 
-## 機能
+## Features
 
-- Assemblyコードのパース
-- LLVM IR生成（`LLVMGenerator`/`AssemblyLifter`）
-- WebAssemblyテキスト/バイナリ生成（`--wast`/`--wasm`）
-- 基本的な算術演算（ADD, SUB, MUL, DIV）
-- データ移動（MOV）
-- 比較（CMP）と条件分岐（JMP, JE/JZ, JNE/JNZ, JL, JG, JLE, JGE）
-- 関数呼び出し（CALL, RET）
-- スタック操作（PUSH, POP）
-- レジスタとメモリアドレスのサポート（簡易）
+- Parse Assembly input
+- Generate LLVM IR (via `LLVMGenerator` and the more advanced `AssemblyLifter`)
+- Generate WebAssembly text/binary (`--wast`/`--wasm`)
+- Basic arithmetic (ADD, SUB, MUL, DIV)
+- Data movement (MOV)
+- Comparison (CMP) and conditional branches (JMP, JE/JZ, JNE/JNZ, JL, JG, JLE, JGE)
+- Function calls (CALL, RET)
+- Stack operations (PUSH, POP)
+- Registers and simple memory addressing support
 
-## 必要な環境
+## Requirements
 
-- CMake 3.15以上
-- LLVM 10.0以上
-- C++17対応コンパイラ（GCC 7+ または Clang 5+）
+- CMake 3.15+
+- LLVM 10.0+
+- C++17 compiler (GCC 7+ or Clang 5+)
 
-## ビルド方法
+## Build
 
 ```bash
-# プロジェクトディレクトリに移動
+# Go to project directory
 cd /home/user/work/asmtowasm
 
-# ビルドディレクトリを作成
+# Create build directory
 mkdir build
 cd build
 
-# CMakeでビルド設定（C++のみ使用）
+# Configure with CMake (C++ only)
 cmake ..
 
-# ビルド実行
+# Build
 make
 ```
 
-## 使用方法
+## Usage
 
 ```bash
-# 基本: LLVM IRを標準出力（または -o でファイル）
+# Basic: print LLVM IR to stdout (or to file with -o)
 ./asmtowasm /home/user/work/asmtowasm/examples/simple_add.asm
 ./asmtowasm -o /home/user/work/asmtowasm/build/out.ll /home/user/work/asmtowasm/examples/arithmetic.asm
 
-# 高度なリフター（推奨）でIR生成ログを詳細表示
+# Use advanced lifter (recommended) for detailed IR logs
 ./asmtowasm --lifter /home/user/work/asmtowasm/examples/function_calls.asm
 
-# WebAssemblyテキスト/バイナリ出力（入力は最後の位置引数）
+# Emit WebAssembly text/binary (input file is the last positional argument)
 ./asmtowasm --wast /home/user/work/asmtowasm/build/out.wat /home/user/work/asmtowasm/examples/conditional_jump.asm
 ./asmtowasm --wasm /home/user/work/asmtowasm/build/out.wasm /home/user/work/asmtowasm/examples/loop_example.asm
 
-# ヘルプ
+# Help
 ./asmtowasm --help
 ```
 
-## サポートされているAssembly構文
+## Supported Assembly syntax
 
-### 命令形式
+### Instruction form
 ```
-[ラベル:] 命令 [オペランド1] [, オペランド2] [; コメント]
+[label:] MNEMONIC [operand1] [, operand2] [; comment]
 ```
 
-### オペランドの種類
-- **レジスタ**: `%eax`, `%ebx`, `%ecx`, `%edx`, `%esi`, `%edi`
-- **即値**: `10`, `-5`, `0x1A`
-- **メモリアドレス**: `(%eax)`, `(%ebx+4)`
-- **ラベル**: `start`, `loop`, `end`
+### Operand kinds
+- Registers: `%eax`, `%ebx`, `%ecx`, `%edx`, `%esi`, `%edi`
+- Immediates: `10`, `-5`, `0x1A`
+- Memory addresses: `(%eax)`, `(%ebx+4)`
+- Labels: `start`, `loop`, `end`
 
-### サポートされている命令
+### Supported instructions
 
-#### 算術演算
-- `ADD dst, src` - 加算
-- `SUB dst, src` - 減算
-- `MUL dst, src` - 乗算
-- `DIV dst, src` - 除算
+#### Arithmetic
+- `ADD dst, src` - add
+- `SUB dst, src` - subtract
+- `MUL dst, src` - multiply
+- `DIV dst, src` - divide
 
-#### データ移動
-- `MOV dst, src` - データ移動
+#### Data movement
+- `MOV dst, src` - move
 
-#### 比較と分岐
-- `CMP op1, op2` - 比較（符号付きで`ZF, LT, GT, LE, GE`を内部フラグに保存）
-- `JMP label` - 無条件ジャンプ
-- `JE/JZ label` - 等しい（`ZF!=0`）
-- `JNE/JNZ label` - 等しくない（`ZF==0`）
-- `JL label` - 小さい（`LT!=0`）
-- `JG label` - 大きい（`GT!=0`）
-- `JLE label` - 以下（`LE!=0`）
-- `JGE label` - 以上（`GE!=0`）
+#### Comparison and branching
+- `CMP op1, op2` - signed compare; sets internal flags `ZF, LT, GT, LE, GE`
+- `JMP label` - unconditional branch
+- `JE/JZ label` - equal (`ZF != 0`)
+- `JNE/JNZ label` - not equal (`ZF == 0`)
+- `JL label` - less than (`LT != 0`)
+- `JG label` - greater than (`GT != 0`)
+- `JLE label` - less-or-equal (`LE != 0`)
+- `JGE label` - greater-or-equal (`GE != 0`)
 
-#### 関数制御
-- `CALL function` - 関数呼び出し
-- `RET [value]` - 関数から戻る
+#### Functions
+- `CALL function` - call function
+- `RET [value]` - return
 
-#### スタック操作
-- `PUSH src` - スタックにプッシュ
-- `POP dst` - スタックからポップ
+#### Stack
+- `PUSH src` - push
+- `POP dst` - pop
 
-## サンプルコード
+## Examples
 
-### 簡単な加算
+### Simple add
 ```assembly
 start:
     mov %eax, 10      # %eax = 10
     mov %ebx, 20      # %ebx = 20
     add %eax, %ebx    # %eax = %eax + %ebx
-    ret               # 関数から戻る
+    ret               # return
 ```
 
-### 条件分岐
+### Branching
 ```assembly
 compare:
     mov %eax, 10
@@ -137,7 +137,7 @@ end:
     ret
 ```
 
-## 出力例（WAT・新記法）
+## Output example (WAT, modern syntax)
 
 ```wat
 (module
@@ -148,61 +148,61 @@ end:
     i32.const 20
     local.get 1
     i32.store
-    ;; ... 省略 ...
+    ;; ... omitted ...
     i32.const 0
     return)
 )
 ```
 
-## プロジェクト構造
+## Project layout
 
 ```
 asmtowasm/
-├── CMakeLists.txt          # CMakeビルド設定
-├── README.md              # このファイル
-├── include/               # ヘッダーファイル
-│   ├── assembly_parser.h  # Assemblyパーサー
-│   ├── llvm_generator.h   # LLVM IR生成（シンプル）
-│   ├── assembly_lifter.h  # LLVM IR生成（高度）
-│   └── wasm_generator.h   # Wasm生成
-├── src/                   # ソースファイル
-│   ├── main.cpp           # メインアプリケーション
-│   ├── assembly_parser.cpp # Assemblyパーサー
-│   ├── assembly_lifter.cpp # 高度なLLVM IR生成
-│   ├── llvm_generator.cpp  # シンプルなLLVM IR生成
-│   └── wasm_generator.cpp  # Wasm生成
-└── examples/              # サンプルAssemblyファイル
-    ├── simple_add.asm     # 簡単な加算
-    ├── arithmetic.asm     # 算術演算
-    └── conditional_jump.asm # 条件分岐
+├── CMakeLists.txt          # CMake build
+├── README.md               # This file
+├── include/                # Headers
+│   ├── assembly_parser.h   # Assembly parser
+│   ├── llvm_generator.h    # Simple LLVM IR generator
+│   ├── assembly_lifter.h   # Advanced LLVM IR generator
+│   └── wasm_generator.h    # Wasm generator
+├── src/                    # Sources
+│   ├── main.cpp            # CLI
+│   ├── assembly_parser.cpp # Parser
+│   ├── assembly_lifter.cpp # Advanced IR generator
+│   ├── llvm_generator.cpp  # Simple IR generator
+│   └── wasm_generator.cpp  # Wasm generator
+└── examples/               # Sample assemblies
+    ├── simple_add.asm      # simple add
+    ├── arithmetic.asm      # arithmetic
+    └── conditional_jump.asm# branching
 ```
 
-## 制限事項
+## Limitations
 
-- 教育目的の簡易版です
-- 条件分岐は内部フラグ（ZF/LT/GT/LE/GE）ベースの簡易実装（キャリーフラグ等は未対応）
-- メモリ/スタックは簡略モデル（実機ABIとは異なる）
-- Wasm生成は最小限（ブロック構造の最適化は未実装）
-- 最適化は行っていません
+- Educational, simplified
+- Branching relies on internal flags (ZF/LT/GT/LE/GE); CF/SF/OF etc. are not implemented
+- Memory/stack are simplified models (do not follow a real ABI)
+- Wasm emission is minimal (no structured control lowering yet)
+- No optimization passes
 
-## 今後の拡張予定
+## Roadmap
 
-- より多くの命令/フラグのサポート（AND/OR/XOR/SHL/SHR、CF/SF/OFなど）
-- エラーハンドリングの改善
-- 最適化パスの追加
-- デバッグ情報の生成
-- より複雑なメモリアドレッシングモードのサポート
+- More instructions/flags (AND/OR/XOR/SHL/SHR, CF/SF/OF, ...)
+- Better error handling
+- Optimization passes
+- Debug info
+- Richer addressing modes
 
-## トラブルシューティング
+## Troubleshooting
 
-- CMakeが`clang-cl`を検出して失敗する場合は、C++のみを使う設定になっているか確認し、キャッシュ削除後に再設定してください。
-  - `CMakeLists.txt`は`project(AsmToWasm LANGUAGES CXX)`を使用
-  - 例: `rm -rf build/CMakeCache.txt build/CMakeFiles && CXX=/usr/bin/clang++ cmake ..`
+- If CMake detects `clang-cl` and fails, ensure it's configured for C++ only, clear cache, and reconfigure.
+  - `CMakeLists.txt` uses `project(AsmToWasm LANGUAGES CXX)`
+  - Example: `rm -rf build/CMakeCache.txt build/CMakeFiles && CXX=/usr/bin/clang++ cmake ..`
 
-## ライセンス
+## License
 
-このプロジェクトはMITライセンスの下で公開されています。
+This project is released under the MIT License.
 
-## 貢献
+## Contributing
 
-バグ報告や機能追加の提案は、GitHubのIssuesページでお願いします。
+Bug reports and feature requests are welcome via GitHub Issues.
