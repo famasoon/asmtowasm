@@ -28,7 +28,7 @@ This project compiles a simplified Assembly language into LLVM IR (Intermediate 
 
 ```bash
 # Go to project directory
-cd /home/user/work/asmtowasm
+cd asmtowasm
 
 # Create build directory
 mkdir build
@@ -45,15 +45,15 @@ make
 
 ```bash
 # Basic: print LLVM IR to stdout (or to file with -o)
-./asmtowasm /home/user/work/asmtowasm/examples/simple_add.asm
-./asmtowasm -o /home/user/work/asmtowasm/build/out.ll /home/user/work/asmtowasm/examples/arithmetic.asm
+./asmtowasm examples/simple_add.asm
+./asmtowasm -o build/out.ll examples/arithmetic.asm
 
 # Use advanced lifter (recommended) for detailed IR logs
-./asmtowasm --lifter /home/user/work/asmtowasm/examples/function_calls.asm
+./asmtowasm --lifter examples/function_calls.asm
 
 # Emit WebAssembly text/binary (input file is the last positional argument)
-./asmtowasm --wast /home/user/work/asmtowasm/build/out.wat /home/user/work/asmtowasm/examples/conditional_jump.asm
-./asmtowasm --wasm /home/user/work/asmtowasm/build/out.wasm /home/user/work/asmtowasm/examples/loop_example.asm
+./asmtowasm --wast build/out.wat examples/conditional_jump.asm
+./asmtowasm --wasm build/out.wasm examples/loop_example.asm
 
 # Help
 ./asmtowasm --help
@@ -196,7 +196,7 @@ asmtowasm/
 ## Troubleshooting
 
 - If CMake detects `clang-cl` and fails, ensure it's configured for C++ only, clear cache, and reconfigure.
-  - `CMakeLists.txt` uses `project(AsmToWasm LANGUAGES CXX)`
+  - `CMakeLists.txt` uses `project(AsmToWasm)`
   - Example: `rm -rf build/CMakeCache.txt build/CMakeFiles && CXX=/usr/bin/clang++ cmake ..`
 
 ## License
