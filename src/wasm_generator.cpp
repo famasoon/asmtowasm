@@ -129,6 +129,9 @@ namespace asmtowasm
     // 関数ごとにローカルマップを初期化
     localMap_.clear();
 
+    // ローカル変数のインデックスを初期化
+    uint32_t localIndex = 0;
+
     // パラメータを変換
     for (auto &arg : func->args())
     {
