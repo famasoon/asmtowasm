@@ -126,6 +126,9 @@ namespace asmtowasm
 
     WasmFunction wasmFunc(func->getName().str());
 
+    // 関数ごとにローカルマップを初期化
+    localMap_.clear();
+
     // パラメータを変換
     for (auto &arg : func->args())
     {
@@ -161,6 +164,16 @@ namespace asmtowasm
         {
           WasmType resultType = convertLLVMType(inst.getType());
           assignLocalIndex(&inst, resultType, wasmFunc);
+        }
+        else if (!inst.getType()->isVoidTy())
+        {
+          // SSA値をローカルに割り当て、後続で再利用できるようにする
+          WasmType localType = convertLLVMType(inst.getType());
+          if (localType != WasmType::VOID)
+          {
+            wasmFunc.locals.push_back(localType);
+            localMap_[&inst] = localIndex++;
+          }
         }
       }
     }
@@ -303,6 +316,12 @@ namespace asmtowasm
       uint32_t localIdx = getLocalIndex(load->getPointerOperand());
       instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
     }
+    else if (llvm::isa<llvm::Instruction>(lhs))
+    {
+      // 以前にローカルへ保存したSSA値を再利用
+      uint32_t localIdx = getLocalIndex(lhs);
+      instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
+    }
 
     // 右オペランドをスタックにプッシュ
     if (llvm::isa<llvm::ConstantInt>(rhs))
@@ -314,6 +333,12 @@ namespace asmtowasm
     {
       llvm::LoadInst *load = llvm::cast<llvm::LoadInst>(rhs);
       uint32_t localIdx = getLocalIndex(load->getPointerOperand());
+      instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
+    }
+    else if (llvm::isa<llvm::Instruction>(rhs))
+    {
+      // 以前にローカルへ保存したSSA値を再利用
+      uint32_t localIdx = getLocalIndex(rhs);
       instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, localIdx));
     }
 
@@ -607,6 +632,12 @@ namespace asmtowasm
       else if (llvm::isa<llvm::ZExtInst>(value))
       {
         // 直前にzextをローカルに保存している前提で取り出す
+        uint32_t valLocalIdx = getLocalIndex(value);
+        instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, valLocalIdx));
+      }
+      else if (llvm::isa<llvm::Instruction>(value))
+      {
+        // 算術命令などで生成したSSA値を再利用
         uint32_t valLocalIdx = getLocalIndex(value);
         instructions.push_back(WasmInstruction(WasmOpcode::GET_LOCAL, valLocalIdx));
       }
