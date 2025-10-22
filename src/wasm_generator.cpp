@@ -368,7 +368,7 @@ namespace asmtowasm
       return false;
     }
 
-    // 結果をローカル変数に格納
+    // 結果をローカル変数に格納（後で使用されるため）
     uint32_t resultIdx = assignLocalIndex(inst, convertLLVMType(inst->getType()), wasmFunc);
     instructions.push_back(WasmInstruction(WasmOpcode::SET_LOCAL, resultIdx));
 

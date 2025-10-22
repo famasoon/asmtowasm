@@ -60,6 +60,11 @@ namespace asmtowasm
         {
           // 新しい関数に切替え
           currentFunc = getOrCreateFunction(labelName);
+          if (!currentFunc)
+          {
+            std::cout << "関数の作成に失敗: " << labelName << std::endl;
+            return false;
+          }
           // ブロック名の衝突を避けるためクリア
           blocks_.clear();
           registers_.clear();
@@ -69,7 +74,22 @@ namespace asmtowasm
         else
         {
           // 現関数内のブロックとして扱う
+          if (!currentFunc)
+          {
+            // まだ関数が作成されていない場合は、デフォルト関数を作成
+            currentFunc = getOrCreateFunction("main");
+            if (!currentFunc)
+            {
+              std::cout << "デフォルト関数の作成に失敗" << std::endl;
+              return false;
+            }
+          }
           llvm::BasicBlock *labelBlock = getOrCreateBlock(labelName);
+          if (!labelBlock)
+          {
+            std::cout << "ブロックの作成に失敗: " << labelName << std::endl;
+            return false;
+          }
           builder_->SetInsertPoint(labelBlock);
         }
       }
@@ -592,7 +612,24 @@ namespace asmtowasm
     }
 
     // 新しいBasicBlockを作成
-    llvm::Function *currentFunc = builder_->GetInsertBlock()->getParent();
+    llvm::BasicBlock *currentBlock = builder_->GetInsertBlock();
+    llvm::Function *currentFunc = nullptr;
+
+    if (currentBlock)
+    {
+      currentFunc = currentBlock->getParent();
+    }
+    else
+    {
+      // 現在のブロックが設定されていない場合は、デフォルト関数を作成
+      currentFunc = getOrCreateFunction("main");
+      if (!currentFunc)
+      {
+        std::cout << "        エラー: デフォルト関数の作成に失敗" << std::endl;
+        return nullptr;
+      }
+    }
+
     llvm::BasicBlock *block = llvm::BasicBlock::Create(*context_, labelName, currentFunc);
     blocks_[labelName] = block;
     std::cout << "        新しいBasicBlockを作成: " << labelName << std::endl;
