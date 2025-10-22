@@ -122,6 +122,8 @@ namespace asmtowasm
 
   bool WasmGenerator::convertFunction(llvm::Function *func)
   {
+    localMap_.clear();
+
     WasmFunction wasmFunc(func->getName().str());
 
     // パラメータを変換
@@ -134,15 +136,31 @@ namespace asmtowasm
     wasmFunc.returnType = convertLLVMType(func->getReturnType());
 
     // ローカル変数を収集
-    uint32_t localIndex = wasmFunc.params.size();
     for (auto &block : *func)
     {
       for (auto &inst : block)
       {
         if (llvm::isa<llvm::AllocaInst>(inst))
         {
-          wasmFunc.locals.push_back(WasmType::I32); // 簡単化のためI32
-          localMap_[&inst] = localIndex++;
+          assignLocalIndex(&inst, WasmType::I32, wasmFunc);
+        }
+      }
+    }
+
+    // SSA値に対応するローカルを事前確保
+    for (auto &block : *func)
+    {
+      for (auto &inst : block)
+      {
+        if (llvm::isa<llvm::BinaryOperator>(inst) ||
+            llvm::isa<llvm::CmpInst>(inst) ||
+            llvm::isa<llvm::ZExtInst>(inst) ||
+            llvm::isa<llvm::IntToPtrInst>(inst) ||
+            llvm::isa<llvm::PtrToIntInst>(inst) ||
+            llvm::isa<llvm::BitCastInst>(inst))
+        {
+          WasmType resultType = convertLLVMType(inst.getType());
+          assignLocalIndex(&inst, resultType, wasmFunc);
         }
       }
     }
@@ -150,7 +168,7 @@ namespace asmtowasm
     // 基本ブロックを変換
     for (auto &block : *func)
     {
-      if (!convertBasicBlock(&block, wasmFunc.instructions))
+      if (!convertBasicBlock(&block, wasmFunc))
       {
         return false;
       }
@@ -162,11 +180,11 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertBasicBlock(llvm::BasicBlock *block, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertBasicBlock(llvm::BasicBlock *block, WasmFunction &wasmFunc)
   {
     for (auto &inst : *block)
     {
-      if (!convertInstruction(&inst, instructions))
+      if (!convertInstruction(&inst, wasmFunc))
       {
         return false;
       }
@@ -174,31 +192,33 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     if (llvm::isa<llvm::BinaryOperator>(inst))
     {
-      return convertArithmeticInstruction(inst, instructions);
+      return convertArithmeticInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::CmpInst>(inst))
     {
-      return convertCompareInstruction(inst, instructions);
+      return convertCompareInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::BranchInst>(inst))
     {
-      return convertBranchInstruction(inst, instructions);
+      return convertBranchInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::CallInst>(inst))
     {
-      return convertCallInstruction(inst, instructions);
+      return convertCallInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::ReturnInst>(inst))
     {
-      return convertReturnInstruction(inst, instructions);
+      return convertReturnInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::LoadInst>(inst) || llvm::isa<llvm::StoreInst>(inst))
     {
-      return convertMemoryInstruction(inst, instructions);
+      return convertMemoryInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::AllocaInst>(inst))
     {
@@ -207,15 +227,15 @@ namespace asmtowasm
     }
     else if (llvm::isa<llvm::IntToPtrInst>(inst))
     {
-      return convertIntToPtrInstruction(inst, instructions);
+      return convertIntToPtrInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::PtrToIntInst>(inst))
     {
-      return convertPtrToIntInstruction(inst, instructions);
+      return convertPtrToIntInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::BitCastInst>(inst))
     {
-      return convertBitCastInstruction(inst, instructions);
+      return convertBitCastInstruction(inst, wasmFunc);
     }
     else if (llvm::isa<llvm::ZExtInst>(inst))
     {
@@ -227,7 +247,7 @@ namespace asmtowasm
       if (llvm::isa<llvm::CmpInst>(op))
       {
         // 比較をWasmに変換（結果がスタックにi32で積まれる）
-        if (!convertCompareInstruction(llvm::cast<llvm::Instruction>(op), instructions))
+        if (!convertCompareInstruction(llvm::cast<llvm::Instruction>(op), wasmFunc))
         {
           return false;
         }
@@ -251,7 +271,7 @@ namespace asmtowasm
       }
 
       // zextの結果をローカルに保存
-      uint32_t resultIdx = getLocalIndex(inst);
+      uint32_t resultIdx = assignLocalIndex(inst, convertLLVMType(inst->getType()), wasmFunc);
       instructions.push_back(WasmInstruction(WasmOpcode::SET_LOCAL, resultIdx));
       return true;
     }
@@ -261,8 +281,10 @@ namespace asmtowasm
     return false;
   }
 
-  bool WasmGenerator::convertArithmeticInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertArithmeticInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::BinaryOperator *binOp = llvm::cast<llvm::BinaryOperator>(inst);
 
     // オペランドを取得
@@ -319,14 +341,16 @@ namespace asmtowasm
     }
 
     // 結果をローカル変数に格納
-    uint32_t resultIdx = getLocalIndex(inst);
+    uint32_t resultIdx = assignLocalIndex(inst, convertLLVMType(inst->getType()), wasmFunc);
     instructions.push_back(WasmInstruction(WasmOpcode::SET_LOCAL, resultIdx));
 
     return true;
   }
 
-  bool WasmGenerator::convertCompareInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertCompareInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::CmpInst *cmpInst = llvm::cast<llvm::CmpInst>(inst);
 
     // オペランドを取得
@@ -400,8 +424,10 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertBranchInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertBranchInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::BranchInst *branchInst = llvm::cast<llvm::BranchInst>(inst);
 
     if (branchInst->isUnconditional())
@@ -432,8 +458,10 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertCallInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertCallInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::CallInst *callInst = llvm::cast<llvm::CallInst>(inst);
 
     // 引数をスタックにプッシュ
@@ -460,8 +488,10 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertReturnInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertReturnInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::ReturnInst *retInst = llvm::cast<llvm::ReturnInst>(inst);
 
     if (retInst->getNumOperands() > 0)
@@ -478,8 +508,10 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertMemoryInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertMemoryInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     if (llvm::isa<llvm::LoadInst>(inst))
     {
       llvm::LoadInst *loadInst = llvm::cast<llvm::LoadInst>(inst);
@@ -497,7 +529,7 @@ namespace asmtowasm
         {
           // 算術演算の結果を処理（配列アクセス）
           llvm::BinaryOperator *binOp = llvm::cast<llvm::BinaryOperator>(addrOperand);
-          convertArithmeticInstruction(binOp, instructions);
+          convertArithmeticInstruction(binOp, wasmFunc);
         }
         else if (llvm::isa<llvm::ConstantInt>(addrOperand))
         {
@@ -538,7 +570,7 @@ namespace asmtowasm
         {
           // 算術演算の結果を処理（配列アクセス）
           llvm::BinaryOperator *binOp = llvm::cast<llvm::BinaryOperator>(addrOperand);
-          convertArithmeticInstruction(binOp, instructions);
+          convertArithmeticInstruction(binOp, wasmFunc);
         }
         else if (llvm::isa<llvm::ConstantInt>(addrOperand))
         {
@@ -584,6 +616,26 @@ namespace asmtowasm
     }
 
     return true;
+  }
+
+  uint32_t WasmGenerator::assignLocalIndex(llvm::Value *value, WasmType type, WasmFunction &wasmFunc)
+  {
+    if (!value)
+    {
+      return 0;
+    }
+
+    auto it = localMap_.find(value);
+    if (it != localMap_.end())
+    {
+      return it->second;
+    }
+
+    uint32_t index = static_cast<uint32_t>(wasmFunc.params.size() + wasmFunc.locals.size());
+    wasmFunc.locals.push_back(type);
+    localMap_[value] = index;
+
+    return index;
   }
 
   uint32_t WasmGenerator::getLocalIndex(llvm::Value *value)
@@ -790,8 +842,10 @@ namespace asmtowasm
     }
   }
 
-  bool WasmGenerator::convertIntToPtrInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertIntToPtrInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::IntToPtrInst *intToPtr = llvm::cast<llvm::IntToPtrInst>(inst);
 
     // WebAssemblyでは、inttoptrは単純に値をそのまま使用
@@ -813,14 +867,16 @@ namespace asmtowasm
     {
       // 算術演算の結果を処理
       llvm::BinaryOperator *binOp = llvm::cast<llvm::BinaryOperator>(operand);
-      convertArithmeticInstruction(binOp, instructions);
+      convertArithmeticInstruction(binOp, wasmFunc);
     }
 
     return true;
   }
 
-  bool WasmGenerator::convertPtrToIntInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertPtrToIntInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::PtrToIntInst *ptrToInt = llvm::cast<llvm::PtrToIntInst>(inst);
 
     // WebAssemblyでは、ptrtointは単純に値をそのまま使用
@@ -841,8 +897,10 @@ namespace asmtowasm
     return true;
   }
 
-  bool WasmGenerator::convertBitCastInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions)
+  bool WasmGenerator::convertBitCastInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc)
   {
+    auto &instructions = wasmFunc.instructions;
+
     llvm::BitCastInst *bitCast = llvm::cast<llvm::BitCastInst>(inst);
 
     // WebAssemblyでは、bitcastは単純に値をそのまま使用

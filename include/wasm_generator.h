@@ -295,33 +295,34 @@ namespace asmtowasm
     bool convertFunction(llvm::Function *func);
 
     // LLVM基本ブロックをWebAssembly命令に変換
-    bool convertBasicBlock(llvm::BasicBlock *block, std::vector<WasmInstruction> &instructions);
+    bool convertBasicBlock(llvm::BasicBlock *block, WasmFunction &wasmFunc);
 
     // LLVM命令をWebAssembly命令に変換
-    bool convertInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // 算術演算命令を変換
-    bool convertArithmeticInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertArithmeticInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // 比較命令を変換
-    bool convertCompareInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertCompareInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // 分岐命令を変換
-    bool convertBranchInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertBranchInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // 関数呼び出し命令を変換
-    bool convertCallInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertCallInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // 戻り命令を変換
-    bool convertReturnInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertReturnInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // ロード/ストア命令を変換
-    bool convertMemoryInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
-    bool convertIntToPtrInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
-    bool convertPtrToIntInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
-    bool convertBitCastInstruction(llvm::Instruction *inst, std::vector<WasmInstruction> &instructions);
+    bool convertMemoryInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
+    bool convertIntToPtrInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
+    bool convertPtrToIntInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
+    bool convertBitCastInstruction(llvm::Instruction *inst, WasmFunction &wasmFunc);
 
     // LLVM値をWebAssemblyローカルインデックスに変換
+    uint32_t assignLocalIndex(llvm::Value *value, WasmType type, WasmFunction &wasmFunc);
     uint32_t getLocalIndex(llvm::Value *value);
 
     // WebAssemblyバイナリを生成
