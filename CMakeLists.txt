@@ -17,7 +17,6 @@ add_definitions(${LLVM_DEFINITIONS})
 set(SOURCES
     src/main.cpp
     src/assembly_parser.cpp
-    src/llvm_generator.cpp
     src/wasm_generator.cpp
     src/assembly_lifter.cpp
 )
@@ -25,7 +24,6 @@ set(SOURCES
 # ヘッダーファイル
 set(HEADERS
     include/assembly_parser.h
-    include/llvm_generator.h
     include/wasm_generator.h
     include/assembly_lifter.h
 )

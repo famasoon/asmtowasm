@@ -1,15 +1,14 @@
-# AsmToWasm - Assembly to LLVM IR/Wasm Converter
+# AsmToWasm - Assembly to WebAssembly Converter
 
-This is a C++ tool that converts simple Assembly code to LLVM IR and WebAssembly (WAT/WASM).
+This is a C++ tool that converts simple Assembly code directly into WebAssembly (WAT/WASM).
 
 ## Overview
 
-This project compiles a simplified Assembly language into LLVM IR (Intermediate Representation), and optionally emits WebAssembly (WAT/WASM). It is designed for education and prototyping.
+This project compiles a simplified Assembly language into WebAssembly (WAT/WASM). It is designed for education and prototyping.
 
 ## Features
 
 - Parse Assembly input
-- Generate LLVM IR (via `LLVMGenerator` and the more advanced `AssemblyLifter`)
 - Generate WebAssembly text/binary (`--wast`/`--wasm`)
 - Basic arithmetic (ADD, SUB, MUL, DIV)
 - Data movement (MOV)
@@ -44,20 +43,16 @@ make
 ## Usage
 
 ```bash
-# Basic: print LLVM IR to stdout (or to file with -o)
-./asmtowasm examples/simple_add.asm
-./asmtowasm -o build/out.ll examples/arithmetic.asm
-
-# Use advanced lifter (recommended) for detailed IR logs
-./asmtowasm --lifter examples/function_calls.asm
-
 # Emit WebAssembly text/binary (input file is the last positional argument)
+./asmtowasm examples/conditional_jump.asm
 ./asmtowasm --wast build/out.wat examples/conditional_jump.asm
 ./asmtowasm --wasm build/out.wasm examples/loop_example.asm
 
 # Help
 ./asmtowasm --help
 ```
+
+> **Note:** Without explicit `--wasm`/`--wast` flags the tool emits both `<input>.wasm` and `<input>.wat` next to the input file.
 
 ## Supported Assembly syntax
 
@@ -162,14 +157,12 @@ asmtowasm/
 ├── README.md               # This file
 ├── include/                # Headers
 │   ├── assembly_parser.h   # Assembly parser
-│   ├── llvm_generator.h    # Simple LLVM IR generator
-│   ├── assembly_lifter.h   # Advanced LLVM IR generator
+│   ├── assembly_lifter.h   # Assembly→LLVM lifter used for Wasm
 │   └── wasm_generator.h    # Wasm generator
 ├── src/                    # Sources
 │   ├── main.cpp            # CLI
 │   ├── assembly_parser.cpp # Parser
-│   ├── assembly_lifter.cpp # Advanced IR generator
-│   ├── llvm_generator.cpp  # Simple IR generator
+│   ├── assembly_lifter.cpp # Assembly→LLVM lifter
 │   └── wasm_generator.cpp  # Wasm generator
 └── examples/               # Sample assemblies
     ├── simple_add.asm      # simple add
