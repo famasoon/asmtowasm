@@ -32,12 +32,6 @@ namespace asmtowasm
     bool liftToLLVM(const std::vector<Instruction> &instructions,
                     const std::map<std::string, size_t> &labels);
 
-    // LLVM IRを文字列として取得
-    std::string getIRString() const;
-
-    // LLVM IRをファイルに出力
-    bool writeIRToFile(const std::string &filename);
-
     // LLVMモジュールを取得
     llvm::Module *getModule() const { return module_.get(); }
 

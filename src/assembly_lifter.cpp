@@ -4,7 +4,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/DebugInfo.h>
 #include <llvm/IR/DIBuilder.h>
-#include <fstream>
 #include <sstream>
 #include <algorithm>
 #include <iostream>
@@ -121,7 +120,10 @@ namespace asmtowasm
       {
         std::cout << "IR検証エラー: " << verifyError << std::endl;
         std::cout << "生成されたLLVM IR:" << std::endl;
-        std::cout << getIRString() << std::endl;
+        std::string moduleDump;
+        llvm::raw_string_ostream dumpStream(moduleDump);
+        module_->print(dumpStream, nullptr);
+        std::cout << moduleDump << std::endl;
         errorMessage_ = "IR検証エラー: " + verifyError;
         return false;
       }
@@ -129,32 +131,6 @@ namespace asmtowasm
     std::cout << "IR検証成功!" << std::endl;
     std::cout << "Assemblyリフター: LLVM IR生成完了" << std::endl;
 
-    return true;
-  }
-
-  std::string AssemblyLifter::getIRString() const
-  {
-    std::cout << "LLVM IR文字列を生成中..." << std::endl;
-    std::string irString;
-    llvm::raw_string_ostream stream(irString);
-    module_->print(stream, nullptr);
-    std::cout << "LLVM IR文字列生成完了" << std::endl;
-    return irString;
-  }
-
-  bool AssemblyLifter::writeIRToFile(const std::string &filename)
-  {
-    std::cout << "LLVM IRをファイルに出力中: " << filename << std::endl;
-    std::ofstream file(filename);
-    if (!file.is_open())
-    {
-      errorMessage_ = "ファイルを開けませんでした: " + filename;
-      return false;
-    }
-
-    file << getIRString();
-    file.close();
-    std::cout << "LLVM IRファイル出力完了: " << filename << std::endl;
     return true;
   }
 
