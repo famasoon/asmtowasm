@@ -13,7 +13,7 @@ cd build
 
 # CMakeでビルド設定
 echo "CMakeでビルド設定中..."
-cmake ..
+CC=clang CXX=clang++ cmake ..
 
 # ビルド実行
 echo "ビルド実行中..."
