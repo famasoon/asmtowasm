@@ -3,7 +3,6 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/raw_ostream.h>
 #include <sstream>
-#include <set>
 #include <iostream>
 
 namespace asmtowasm
@@ -27,12 +26,12 @@ namespace asmtowasm
     std::cout << "命令数: " << instructions.size() << ", ラベル数: " << labels.size() << std::endl;
 
     // CALL先ラベルを事前収集（関数として扱う）
-    std::set<std::string> callTargets;
+    std::map<std::string, bool> callTargets;
     for (const auto &inst : instructions)
     {
       if (inst.type == InstructionType::CALL && inst.operands.size() == 1 && inst.operands[0].type == OperandType::LABEL)
       {
-        callTargets.insert(inst.operands[0].value);
+        callTargets[inst.operands[0].value] = true;
       }
     }
 
