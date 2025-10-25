@@ -92,27 +92,12 @@ namespace asmtowasm
     // メモリアドレスを計算
     llvm::Value *calculateMemoryAddress(const Operand &operand);
 
-    // レジスタ名を正規化
-    std::string normalizeRegisterName(const std::string &regName);
-
-    // 命令の副作用を処理
-    bool handleInstructionSideEffects(const Instruction &instruction);
-
     // フラグレジスタを管理
     llvm::Value *getFlagRegister(const std::string &flagName);
     void setFlagRegister(const std::string &flagName, llvm::Value *value);
 
-    // メモリ操作を処理
-    bool handleMemoryOperation(const Instruction &instruction);
-
-    // 型変換を処理
-    llvm::Value *performTypeConversion(llvm::Value *value, llvm::Type *targetType);
-
     // 最適化パスを適用
     void applyOptimizationPasses();
-
-    // デバッグ情報を生成
-    void generateDebugInfo();
   };
 
 } // namespace asmtowasm
