@@ -2,10 +2,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/DebugInfo.h>
-#include <llvm/IR/DIBuilder.h>
 #include <sstream>
-#include <algorithm>
 #include <iostream>
 
 namespace asmtowasm
@@ -29,12 +26,12 @@ namespace asmtowasm
     std::cout << "命令数: " << instructions.size() << ", ラベル数: " << labels.size() << std::endl;
 
     // CALL先ラベルを事前収集（関数として扱う）
-    std::set<std::string> callTargets;
+    std::map<std::string, bool> callTargets;
     for (const auto &inst : instructions)
     {
       if (inst.type == InstructionType::CALL && inst.operands.size() == 1 && inst.operands[0].type == OperandType::LABEL)
       {
-        callTargets.insert(inst.operands[0].value);
+        callTargets[inst.operands[0].value] = true;
       }
     }
 
@@ -732,21 +729,6 @@ namespace asmtowasm
     }
   }
 
-  std::string AssemblyLifter::normalizeRegisterName(const std::string &regName)
-  {
-    std::cout << "        レジスタ名を正規化: " << regName << std::endl;
-    std::string normalized = regName;
-    std::transform(normalized.begin(), normalized.end(), normalized.begin(), ::tolower);
-    return normalized;
-  }
-
-  bool AssemblyLifter::handleInstructionSideEffects(const Instruction &instruction)
-  {
-    std::cout << "        命令の副作用を処理: タイプ=" << static_cast<int>(instruction.type) << std::endl;
-    // 命令の副作用を処理（フラグレジスタの更新など）
-    return true;
-  }
-
   llvm::Value *AssemblyLifter::getFlagRegister(const std::string &flagName)
   {
     std::cout << "        フラグレジスタを取得: " << flagName << std::endl;
@@ -760,102 +742,6 @@ namespace asmtowasm
     std::cout << "        フラグレジスタを設定: " << flagName << std::endl;
   }
 
-  bool AssemblyLifter::handleMemoryOperation(const Instruction &instruction)
-  {
-    std::cout << "        メモリ操作を処理: タイプ=" << static_cast<int>(instruction.type) << std::endl;
-
-    switch (instruction.type)
-    {
-    case InstructionType::MOV:
-      // MOV命令のメモリ操作は既にliftMoveInstructionで処理済み
-      return true;
-
-    case InstructionType::ADD:
-    case InstructionType::SUB:
-    case InstructionType::MUL:
-    case InstructionType::DIV:
-      // 算術命令のメモリ操作は既にliftArithmeticInstructionで処理済み
-      return true;
-
-    case InstructionType::CMP:
-      // 比較命令のメモリ操作は既にliftCompareInstructionで処理済み
-      return true;
-
-    case InstructionType::PUSH:
-    case InstructionType::POP:
-      // スタック操作のメモリ操作は既にliftStackInstructionで処理済み
-      return true;
-
-    default:
-      std::cout << "        未対応のメモリ操作命令: " << static_cast<int>(instruction.type) << std::endl;
-      return true;
-    }
-  }
-
-  llvm::Value *AssemblyLifter::performTypeConversion(llvm::Value *value, llvm::Type *targetType)
-  {
-    std::cout << "        型変換を処理" << std::endl;
-
-    if (!value || !targetType)
-    {
-      std::cout << "        型変換エラー: 無効な値または型" << std::endl;
-      return nullptr;
-    }
-
-    llvm::Type *sourceType = value->getType();
-
-    // 同じ型の場合は変換不要
-    if (sourceType == targetType)
-    {
-      std::cout << "        型変換不要: 同じ型" << std::endl;
-      return value;
-    }
-
-    // 整数型の変換
-    if (sourceType->isIntegerTy() && targetType->isIntegerTy())
-    {
-      unsigned sourceBits = sourceType->getIntegerBitWidth();
-      unsigned targetBits = targetType->getIntegerBitWidth();
-
-      if (sourceBits < targetBits)
-      {
-        // ゼロ拡張
-        std::cout << "        ゼロ拡張: " << sourceBits << " -> " << targetBits << std::endl;
-        return builder_->CreateZExt(value, targetType, "zext");
-      }
-      else if (sourceBits > targetBits)
-      {
-        // 切り詰め
-        std::cout << "        切り詰め: " << sourceBits << " -> " << targetBits << std::endl;
-        return builder_->CreateTrunc(value, targetType, "trunc");
-      }
-    }
-
-    // ポインタ型の変換
-    if (sourceType->isPointerTy() && targetType->isPointerTy())
-    {
-      std::cout << "        ポインタ型変換" << std::endl;
-      return builder_->CreateBitCast(value, targetType, "bitcast");
-    }
-
-    // 整数からポインタへの変換
-    if (sourceType->isIntegerTy() && targetType->isPointerTy())
-    {
-      std::cout << "        整数からポインタへの変換" << std::endl;
-      return builder_->CreateIntToPtr(value, targetType, "inttoptr");
-    }
-
-    // ポインタから整数への変換
-    if (sourceType->isPointerTy() && targetType->isIntegerTy())
-    {
-      std::cout << "        ポインタから整数への変換" << std::endl;
-      return builder_->CreatePtrToInt(value, targetType, "ptrtoint");
-    }
-
-    std::cout << "        未対応の型変換" << std::endl;
-    return value;
-  }
-
   void AssemblyLifter::applyOptimizationPasses()
   {
     std::cout << "最適化パスを適用中..." << std::endl;
@@ -865,83 +751,4 @@ namespace asmtowasm
 
     std::cout << "最適化パス適用完了（スキップ）" << std::endl;
   }
-
-  void AssemblyLifter::generateDebugInfo()
-  {
-    std::cout << "デバッグ情報を生成中..." << std::endl;
-
-    try
-    {
-      // DIBuilderを作成
-      llvm::DIBuilder dibuilder(*module_);
-
-      // デバッグ情報のファイルを作成
-      auto file = dibuilder.createFile("assembly_module.asm", "/home/user/work/asmtowasm");
-
-      // デバッグ情報のコンパイル単位を作成
-      auto compileUnit = dibuilder.createCompileUnit(
-          llvm::dwarf::DW_LANG_C, file, "AsmToWasm", false, "", 0);
-
-      // 基本型を作成
-      auto int32Type = dibuilder.createBasicType("int32", 32, llvm::dwarf::DW_ATE_signed);
-      auto int32PtrType = dibuilder.createPointerType(int32Type, 32);
-
-      // 関数の型を作成
-      auto funcType = dibuilder.createSubroutineType(dibuilder.getOrCreateTypeArray(int32Type));
-
-      // 関数のデバッグ情報を作成
-      for (auto &func : *module_)
-      {
-        if (func.getName() == "main")
-        {
-          // メイン関数のデバッグ情報
-          auto subprogram = dibuilder.createFunction(
-              file, func.getName(), func.getName(), file, 1,
-              funcType, 1, llvm::DINode::FlagPrototyped, llvm::DISubprogram::SPFlagZero);
-
-          // 関数の開始位置を設定
-          func.setSubprogram(subprogram);
-
-          // レジスタのデバッグ情報を作成
-          for (auto &block : func)
-          {
-            for (auto &inst : block)
-            {
-              if (auto alloca = llvm::dyn_cast<llvm::AllocaInst>(&inst))
-              {
-                // レジスタ変数のデバッグ情報
-                std::string varName = alloca->getName().str();
-                if (varName.find('%') != std::string::npos)
-                {
-                  auto var = dibuilder.createAutoVariable(
-                      subprogram, varName, file, 1, int32Type, true);
-
-                  // 変数の位置情報を設定
-                  auto location = dibuilder.createExpression();
-                  dibuilder.insertDeclare(alloca, var, location,
-                                          llvm::DILocation::get(*context_, 1, 0, subprogram), &block);
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // デバッグ情報を最終化
-      dibuilder.finalize();
-
-      std::cout << "デバッグ情報生成完了" << std::endl;
-    }
-    catch (const std::exception &e)
-    {
-      std::cout << "デバッグ情報生成エラー: " << e.what() << std::endl;
-      std::cout << "デバッグ情報生成をスキップします" << std::endl;
-    }
-    catch (...)
-    {
-      std::cout << "デバッグ情報生成で不明なエラーが発生しました" << std::endl;
-      std::cout << "デバッグ情報生成をスキップします" << std::endl;
-    }
-  }
-
 } // namespace asmtowasm
