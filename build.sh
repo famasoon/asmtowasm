@@ -11,6 +11,9 @@ fi
 
 cd build
 
+# CMakeキャッシュをクリア（古い設定を削除）
+rm -f CMakeCache.txt
+
 # CMakeでビルド設定
 echo "CMakeでビルド設定中..."
 CC=clang CXX=clang++ cmake ..
